@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agritect — Support Dashboard</title>
+<style>
+  :root {
+    --green:#1E6B3A; --green-deep:#124A27; --green-light:#EAF3EA;
+    --paper:#F4F6EF; --card:#FFFFFF; --ink:#1C2419; --muted:#5A6355;
+    --line:#D9DED2; --red:#B3261E; --amber:#9A5B00; --amber-bg:#FFF4E0;
+    --sure:#2E7D32; --likely:#9A5B00; --unsure:#5A6355;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+         background: var(--paper); color: var(--ink); font-size: 15px; line-height: 1.5; }
+
+  /* ── setup screen ── */
+  #setup { display:flex; align-items:center; justify-content:center;
+           min-height:100vh; padding:24px; }
+  .setup-card { background:var(--card); border:2px solid var(--line); border-radius:20px;
+                padding:36px; max-width:520px; width:100%; }
+  .setup-card h1 { font-size:24px; color:var(--green-deep); margin-bottom:6px; }
+  .setup-card p  { color:var(--muted); margin-bottom:24px; font-size:14px; }
+  .setup-card label { display:block; font-weight:600; margin-bottom:4px; font-size:13px; }
+  .setup-card textarea, .setup-card input {
+    width:100%; border:2px solid var(--line); border-radius:10px;
+    padding:10px 12px; font:inherit; font-size:13px; resize:vertical;
+    background:var(--paper); color:var(--ink); margin-bottom:16px; }
+  .setup-card textarea { height:160px; font-family:monospace; }
+  .setup-card textarea:focus, .setup-card input:focus
+    { outline:none; border-color:var(--green); }
+  .hint-box { background:var(--green-light); border-radius:10px;
+              padding:12px 14px; font-size:13px; color:var(--green-deep);
+              margin-bottom:20px; }
+  .hint-box code { background:rgba(0,0,0,.08); border-radius:4px;
+                   padding:1px 5px; font-size:12px; }
+
+  /* ── top bar ── */
+  #topbar { background:var(--green-deep); color:#fff; padding:0 24px;
+            display:flex; align-items:center; gap:16px; height:56px; position:sticky; top:0; z-index:10; }
+  #topbar h1 { font-size:18px; font-weight:700; flex:1; }
+  #topbar span { font-size:13px; opacity:.7; }
+  #topbar button { background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.3);
+                   color:#fff; border-radius:8px; padding:6px 14px; cursor:pointer; font:inherit; font-size:13px; }
+  #topbar button:hover { background:rgba(255,255,255,.25); }
+
+  /* ── main layout ── */
+  #dashboard { display:none; }
+  main { max-width:1200px; margin:0 auto; padding:24px; }
+
+  /* ── stat cards ── */
+  .stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px,1fr)); gap:16px; margin-bottom:28px; }
+  .stat { background:var(--card); border:2px solid var(--line); border-radius:16px; padding:20px; }
+  .stat .label { font-size:12px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.05em; margin-bottom:6px; }
+  .stat .value { font-size:32px; font-weight:700; color:var(--green-deep); line-height:1; }
+  .stat .sub   { font-size:12px; color:var(--muted); margin-top:4px; }
+
+  /* ── section cards ── */
+  .section { background:var(--card); border:2px solid var(--line); border-radius:16px;
+             padding:20px; margin-bottom:20px; }
+  .section-head { display:flex; align-items:center; justify-content:space-between;
+                  margin-bottom:16px; flex-wrap:wrap; gap:10px; }
+  .section-head h2 { font-size:16px; font-weight:700; color:var(--green-deep); }
+
+  /* ── filters ── */
+  .filters { display:flex; gap:10px; flex-wrap:wrap; }
+  .filters select, .filters input {
+    border:2px solid var(--line); border-radius:8px; padding:6px 10px;
+    font:inherit; font-size:13px; background:var(--paper); color:var(--ink); }
+  .filters select:focus, .filters input:focus { outline:none; border-color:var(--green); }
+
+  /* ── table ── */
+  .tbl-wrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { text-align:left; padding:8px 12px; font-size:11px; font-weight:700;
+       text-transform:uppercase; letter-spacing:.05em; color:var(--muted);
+       border-bottom:2px solid var(--line); white-space:nowrap; }
+  td { padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:middle; }
+  tr:last-child td { border-bottom:none; }
+  tr:hover td { background:var(--paper); }
+  .empty { text-align:center; color:var(--muted); padding:32px; font-size:14px; }
+
+  /* ── badges ── */
+  .badge { display:inline-block; border-radius:999px; padding:2px 10px;
+           font-size:11px; font-weight:700; }
+  .badge.sure    { background:#E8F5E9; color:var(--sure); }
+  .badge.likely  { background:var(--amber-bg); color:var(--amber); }
+  .badge.unsure  { background:#F5F5F5; color:var(--unsure); }
+  .badge.auto    { background:var(--green-light); color:var(--green-deep); }
+  .badge.human   { background:#EDE7F6; color:#4527A0; }
+  .crop-tag { display:inline-block; background:var(--paper); border:1px solid var(--line);
+              border-radius:6px; padding:1px 8px; font-size:12px; }
+
+  /* ── Pi activity ── */
+  .pi-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(240px,1fr)); gap:12px; }
+  .pi-card { border:2px solid var(--line); border-radius:12px; padding:14px; }
+  .pi-card .pi-id { font-family:monospace; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  .pi-card .pi-count { font-size:22px; font-weight:700; color:var(--green-deep); }
+  .pi-card .pi-last { font-size:12px; color:var(--muted); margin-top:4px; }
+  .pi-card .pi-top  { font-size:13px; margin-top:6px; font-weight:600; }
+
+  /* ── version / update ── */
+  .update-row { display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  .ver-box { background:var(--paper); border:2px solid var(--line); border-radius:10px;
+             padding:10px 18px; font-size:22px; font-weight:700; color:var(--green-deep); }
+  .ver-label { font-size:12px; color:var(--muted); margin-bottom:2px; }
+
+  /* ── buttons ── */
+  .btn { display:inline-flex; align-items:center; gap:8px; padding:10px 20px;
+         border-radius:12px; font:inherit; font-size:14px; font-weight:700;
+         cursor:pointer; border:2px solid var(--green-deep); transition:opacity .15s; }
+  .btn:disabled { opacity:.45; cursor:default; }
+  .btn.primary { background:var(--green); color:#fff; }
+  .btn.primary:hover:not(:disabled) { background:var(--green-deep); }
+  .btn.quiet  { background:var(--card); color:var(--ink); border-color:var(--line); }
+  .btn.quiet:hover:not(:disabled) { background:var(--paper); }
+  .btn.danger { background:#B3261E; color:#fff; border-color:#7B1A13; }
+
+  /* ── toast ── */
+  #toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+           background:var(--ink); color:#fff; border-radius:12px; padding:12px 20px;
+           font-size:14px; display:none; z-index:99; white-space:nowrap; }
+
+  /* ── loading spinner ── */
+  .spin { display:inline-block; width:16px; height:16px; border:2px solid rgba(255,255,255,.4);
+          border-top-color:#fff; border-radius:50%; animation:spin .7s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  /* ── disease name ── */
+  .disease { font-weight:600; }
+  .conf    { color:var(--muted); font-size:12px; }
+
+  /* ── photo thumb ── */
+  .thumb-cell img { width:48px; height:48px; object-fit:cover; border-radius:6px;
+                    border:1px solid var(--line); cursor:pointer; }
+  .thumb-cell .no-photo { width:48px; height:48px; border-radius:6px;
+                          background:var(--paper); border:1px solid var(--line);
+                          display:flex; align-items:center; justify-content:center;
+                          font-size:18px; }
+
+  /* ── lightbox ── */
+  #lightbox { position:fixed; inset:0; background:rgba(0,0,0,.85); display:none;
+              align-items:center; justify-content:center; z-index:50; }
+  #lightbox.on { display:flex; }
+  #lightbox img { max-width:90vw; max-height:90vh; border-radius:12px; }
+  #lightbox-close { position:absolute; top:16px; right:20px; background:none;
+                    border:none; color:#fff; font-size:32px; cursor:pointer; }
+</style>
+</head>
+<body>
+
+<!-- ══ SETUP SCREEN ══════════════════════════════════════════════════════════ -->
+<div id="setup">
+  <div class="setup-card">
+    <h1>🌿 Agritect Support</h1>
+    <p>Paste the contents of your <code>cloud/ops-sas.env</code> file to connect to Azure.</p>
+
+    <div class="hint-box">
+      On your laptop, open <code>cloud/ops-sas.env</code> and copy everything inside it.
+      Your credentials are saved locally in this browser only.
+    </div>
+
+    <label>Paste ops-sas.env contents</label>
+    <textarea id="env-paste" placeholder="# Agritect — Ops credentials&#10;AZURE_ACCOUNT_URL=&quot;https://...&quot;&#10;AZURE_STORAGE_ACCOUNT=&quot;...&quot;&#10;AZURE_INCOMING_CONTAINER=&quot;incoming&quot;&#10;AZURE_OUTGOING_CONTAINER=&quot;outgoing&quot;&#10;AZURE_OPS_SAS=&quot;se=...&quot;"></textarea>
+
+    <p style="color:var(--muted);font-size:12px;margin-bottom:16px">
+      Or enter each field manually:
+    </p>
+
+    <label>Azure Account URL</label>
+    <input id="f-url" type="url" placeholder="https://agritect….blob.core.windows.net">
+
+    <label>Ops SAS Token</label>
+    <input id="f-sas" type="text" placeholder="se=…&sp=…&sig=…">
+
+    <label>Incoming container (default: incoming)</label>
+    <input id="f-in" type="text" value="incoming">
+
+    <label>Outgoing container (default: outgoing)</label>
+    <input id="f-out" type="text" value="outgoing">
+
+    <button class="btn primary" id="btn-connect" style="width:100%;justify-content:center">
+      Connect to Azure
+    </button>
+    <p id="setup-err" style="color:var(--red);font-size:13px;margin-top:10px;display:none"></p>
+  </div>
+</div>
+
+<!-- ══ DASHBOARD ═════════════════════════════════════════════════════════════ -->
+<div id="dashboard">
+  <div id="topbar">
+    <h1>🌿 Agritect — Support Dashboard</h1>
+    <span id="acct-label"></span>
+    <button onclick="logout()">Change credentials</button>
+  </div>
+
+  <main>
+
+    <!-- Stats -->
+    <div class="stats">
+      <div class="stat">
+        <div class="label">Total Scans</div>
+        <div class="value" id="s-total">—</div>
+        <div class="sub">across all Pis</div>
+      </div>
+      <div class="stat">
+        <div class="label">Active Pis</div>
+        <div class="value" id="s-pis">—</div>
+        <div class="sub">have synced data</div>
+      </div>
+      <div class="stat">
+        <div class="label">Top Disease</div>
+        <div class="value" id="s-top" style="font-size:18px;margin-top:4px">—</div>
+        <div class="sub" id="s-top-pct"></div>
+      </div>
+      <div class="stat">
+        <div class="label">Cloud Version</div>
+        <div class="value" id="s-ver">—</div>
+        <div class="sub">outgoing/version.txt</div>
+      </div>
+    </div>
+
+    <!-- Pi activity -->
+    <div class="section">
+      <div class="section-head">
+        <h2>Pi Activity</h2>
+        <button class="btn quiet" id="btn-refresh" onclick="loadAll()">↺ Refresh</button>
+      </div>
+      <div class="pi-grid" id="pi-grid">
+        <div class="empty">Loading…</div>
+      </div>
+    </div>
+
+    <!-- Diagnoses table -->
+    <div class="section">
+      <div class="section-head">
+        <h2>All Diagnoses</h2>
+        <div class="filters">
+          <select id="f-pi">    <option value="">All Pis</option></select>
+          <select id="f-crop">  <option value="">All Crops</option></select>
+          <select id="f-band">  <option value="">All Confidence</option>
+            <option value="sure">Sure</option>
+            <option value="likely">Likely</option>
+            <option value="unsure">Unsure</option>
+          </select>
+          <input id="f-search" type="search" placeholder="Search disease…" style="width:180px">
+          <button class="btn quiet" id="btn-csv" onclick="downloadCSV()">⬇ CSV</button>
+        </div>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Photo</th>
+              <th>Time</th>
+              <th>Pi</th>
+              <th>Crop</th>
+              <th>Disease</th>
+              <th>Confidence</th>
+              <th>Mode</th>
+            </tr>
+          </thead>
+          <tbody id="diag-body">
+            <tr><td colspan="8" class="empty">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Update control -->
+    <div class="section">
+      <div class="section-head">
+        <h2>Update Control</h2>
+      </div>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
+        Bumping the version tells all Pis to pull whatever is in the
+        <strong>outgoing/</strong> container on their next ethernet connection.
+        Upload new files first using <code>bash cloud/push_update.sh</code>,
+        then bump here — or bump from the script directly.
+      </p>
+      <div class="update-row">
+        <div>
+          <div class="ver-label">Current version</div>
+          <div class="ver-box" id="ver-current">—</div>
+        </div>
+        <div>
+          <div class="ver-label">Will become</div>
+          <div class="ver-box" id="ver-next" style="color:var(--muted)">—</div>
+        </div>
+        <button class="btn primary" id="btn-bump" onclick="bumpVersion()" style="margin-top:18px">
+          Bump version → push update to all Pis
+        </button>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- lightbox -->
+<div id="lightbox" onclick="closeLightbox()">
+  <button id="lightbox-close" onclick="closeLightbox()">✕</button>
+  <img id="lightbox-img" src="" alt="">
+</div>
+
+<div id="toast"></div>
+
+<script>
+"use strict";
+
+// ── credentials ──────────────────────────────────────────────────────────────
+var CFG = null;
+
+function parseEnv(text) {
+  var cfg = {};
+  text.split("\n").forEach(function(line) {
+    line = line.trim();
+    if (!line || line.startsWith("#")) return;
+    var eq = line.indexOf("=");
+    if (eq < 0) return;
+    var k = line.slice(0, eq).trim();
+    var v = line.slice(eq + 1).trim().replace(/^["']|["']$/g, "");
+    cfg[k] = v;
+  });
+  return cfg;
+}
+
+function credsFromForm() {
+  return {
+    AZURE_ACCOUNT_URL:        document.getElementById("f-url").value.trim().replace(/\/$/, ""),
+    AZURE_OPS_SAS:            document.getElementById("f-sas").value.trim(),
+    AZURE_INCOMING_CONTAINER: document.getElementById("f-in").value.trim()  || "incoming",
+    AZURE_OUTGOING_CONTAINER: document.getElementById("f-out").value.trim() || "outgoing",
+  };
+}
+
+function validateCfg(cfg) {
+  return cfg.AZURE_ACCOUNT_URL &&
+         cfg.AZURE_OPS_SAS &&
+         cfg.AZURE_INCOMING_CONTAINER &&
+         cfg.AZURE_OUTGOING_CONTAINER;
+}
+
+document.getElementById("env-paste").addEventListener("input", function() {
+  var parsed = parseEnv(this.value);
+  if (parsed.AZURE_ACCOUNT_URL)        document.getElementById("f-url").value  = parsed.AZURE_ACCOUNT_URL;
+  if (parsed.AZURE_OPS_SAS)            document.getElementById("f-sas").value  = parsed.AZURE_OPS_SAS;
+  if (parsed.AZURE_INCOMING_CONTAINER) document.getElementById("f-in").value   = parsed.AZURE_INCOMING_CONTAINER;
+  if (parsed.AZURE_OUTGOING_CONTAINER) document.getElementById("f-out").value  = parsed.AZURE_OUTGOING_CONTAINER;
+});
+
+document.getElementById("btn-connect").addEventListener("click", async function() {
+  var cfg = credsFromForm();
+  if (!validateCfg(cfg)) {
+    showSetupErr("Please fill in all fields (or paste ops-sas.env above).");
+    return;
+  }
+  // Quick connectivity test — try to read version.txt
+  this.disabled = true;
+  this.innerHTML = '<span class="spin"></span> Connecting…';
+  try {
+    var url = blobUrl(cfg, cfg.AZURE_OUTGOING_CONTAINER, "version.txt");
+    var resp = await fetch(url);
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    localStorage.setItem("ag_support_cfg", JSON.stringify(cfg));
+    CFG = cfg;
+    showDashboard();
+  } catch(e) {
+    showSetupErr("Could not connect: " + e.message + ". Check your credentials and that CORS is enabled on the storage account.");
+  } finally {
+    this.disabled = false;
+    this.textContent = "Connect to Azure";
+  }
+});
+
+function showSetupErr(msg) {
+  var el = document.getElementById("setup-err");
+  el.textContent = msg;
+  el.style.display = "block";
+}
+
+function logout() {
+  localStorage.removeItem("ag_support_cfg");
+  CFG = null;
+  document.getElementById("dashboard").style.display = "none";
+  document.getElementById("setup").style.display = "flex";
+}
+
+// ── Azure REST helpers ────────────────────────────────────────────────────────
+function blobUrl(cfg, container, name) {
+  return cfg.AZURE_ACCOUNT_URL + "/" + container + "/" + name + "?" + cfg.AZURE_OPS_SAS;
+}
+
+function listUrl(cfg, container, prefix) {
+  prefix = prefix || "";
+  return cfg.AZURE_ACCOUNT_URL + "/" + container
+    + "?restype=container&comp=list&prefix=" + encodeURIComponent(prefix)
+    + "&" + cfg.AZURE_OPS_SAS;
+}
+
+async function azList(container, prefix) {
+  var resp = await fetch(listUrl(CFG, container, prefix));
+  if (!resp.ok) throw new Error("List failed: " + resp.status);
+  var xml  = await resp.text();
+  var names = [];
+  xml.replace(/<Name>([^<]+)<\/Name>/g, function(_, n) { names.push(n); });
+  return names;
+}
+
+async function azGet(container, name) {
+  var resp = await fetch(blobUrl(CFG, container, name));
+  if (!resp.ok) throw new Error("Download failed: " + resp.status + " — " + name);
+  return resp.text();
+}
+
+async function azPut(container, name, body) {
+  var resp = await fetch(blobUrl(CFG, container, name), {
+    method: "PUT",
+    headers: { "x-ms-blob-type": "BlockBlob", "Content-Type": "text/plain" },
+    body: body,
+  });
+  if (!resp.ok) throw new Error("Upload failed: " + resp.status);
+}
+
+async function azGetBlob(container, name) {
+  var resp = await fetch(blobUrl(CFG, container, name));
+  if (!resp.ok) throw new Error("Download failed: " + resp.status);
+  return resp.blob();
+}
+
+// ── data loading ──────────────────────────────────────────────────────────────
+var ALL_ROWS = [];    // flat array of all parsed diagnosis rows
+var PI_MAP   = {};    // piId → { rows, lastTs }
+
+async function loadAll() {
+  document.getElementById("btn-refresh").textContent = "Loading…";
+  document.getElementById("btn-refresh").disabled = true;
+  try {
+    ALL_ROWS = [];
+    PI_MAP   = {};
+
+    // 1. Get all blobs in incoming/ to discover Pi IDs
+    var blobs = await azList(CFG.AZURE_INCOMING_CONTAINER, "");
+    // blobs look like:  <piId>/labels.jsonl  or  <piId>/photos/<file>.jpg
+    var labelBlobs = blobs.filter(function(b) { return b.endsWith("/labels.jsonl"); });
+    var piIds = labelBlobs.map(function(b) { return b.split("/")[0]; });
+
+    // 2. For each Pi, download and parse labels.jsonl
+    await Promise.all(piIds.map(async function(piId) {
+      try {
+        var text = await azGet(CFG.AZURE_INCOMING_CONTAINER, piId + "/labels.jsonl");
+        var rows = text.trim().split("\n").filter(Boolean).map(function(line) {
+          try {
+            var r = JSON.parse(line);
+            r._pi = piId;
+            // Check if a photo blob exists for this session
+            r._photoBlob = piId + "/photos/" + r.session + ".jpg";
+            return r;
+          } catch(e) { return null; }
+        }).filter(Boolean);
+
+        PI_MAP[piId] = {
+          rows:   rows,
+          lastTs: rows.length ? Math.max.apply(null, rows.map(function(r){ return r.ts; })) : 0,
+        };
+        ALL_ROWS = ALL_ROWS.concat(rows);
+      } catch(e) {
+        console.warn("Failed to load Pi " + piId + ":", e);
+      }
+    }));
+
+    // Sort newest first
+    ALL_ROWS.sort(function(a, b) { return b.ts - a.ts; });
+
+    // 3. Collect the list of photo blobs so we know which sessions have photos
+    var photoBlobs = new Set(blobs.filter(function(b) { return b.includes("/photos/"); }));
+
+    // 4. Fetch version
+    var ver = await azGet(CFG.AZURE_OUTGOING_CONTAINER, "version.txt").catch(function(){ return "?"; });
+    ver = ver.trim();
+
+    renderAll(ver, photoBlobs);
+    populateFilters();
+  } catch(e) {
+    toast("Error loading data: " + e.message, true);
+    console.error(e);
+  } finally {
+    document.getElementById("btn-refresh").textContent = "↺ Refresh";
+    document.getElementById("btn-refresh").disabled = false;
+  }
+}
+
+// ── rendering ─────────────────────────────────────────────────────────────────
+function renderAll(ver, photoBlobs) {
+  renderStats(ver);
+  renderPiGrid(photoBlobs);
+  renderTable(ALL_ROWS, photoBlobs);
+  setVersion(ver);
+}
+
+function renderStats(ver) {
+  document.getElementById("s-total").textContent = ALL_ROWS.length.toLocaleString();
+  document.getElementById("s-pis").textContent   = Object.keys(PI_MAP).length;
+  document.getElementById("s-ver").textContent   = ver;
+
+  // Top disease
+  var counts = {};
+  ALL_ROWS.forEach(function(r) {
+    if (r.label && !r.label.startsWith("_")) {
+      counts[r.label] = (counts[r.label] || 0) + 1;
+    }
+  });
+  var top = Object.entries(counts).sort(function(a,b){ return b[1]-a[1]; })[0];
+  if (top) {
+    document.getElementById("s-top").textContent     = formatDisease(top[0]);
+    document.getElementById("s-top-pct").textContent =
+      top[1] + " scans (" + Math.round(top[1] / ALL_ROWS.length * 100) + "%)";
+  } else {
+    document.getElementById("s-top").textContent     = "—";
+    document.getElementById("s-top-pct").textContent = "";
+  }
+}
+
+function renderPiGrid(photoBlobs) {
+  var grid = document.getElementById("pi-grid");
+  var pis  = Object.entries(PI_MAP);
+  if (!pis.length) {
+    grid.innerHTML = '<div class="empty">No Pi data found in incoming/ yet.</div>';
+    return;
+  }
+  // Sort by last sync descending
+  pis.sort(function(a,b) { return b[1].lastTs - a[1].lastTs; });
+  grid.innerHTML = pis.map(function(entry) {
+    var id = entry[0], info = entry[1];
+    var counts = {};
+    info.rows.forEach(function(r) {
+      if (r.label && !r.label.startsWith("_"))
+        counts[r.label] = (counts[r.label] || 0) + 1;
+    });
+    var topD = Object.entries(counts).sort(function(a,b){ return b[1]-a[1]; })[0];
+    return [
+      '<div class="pi-card">',
+        '<div class="pi-id">Pi · ' + id + '</div>',
+        '<div class="pi-count">' + info.rows.length + ' scans</div>',
+        '<div class="pi-last">Last sync: ' + (info.lastTs ? fmtDate(info.lastTs) : '—') + '</div>',
+        topD ? '<div class="pi-top">Top: ' + formatDisease(topD[0]) + '</div>' : '',
+      '</div>',
+    ].join("");
+  }).join("");
+}
+
+function renderTable(rows, photoBlobs) {
+  var tbody = document.getElementById("diag-body");
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty">No diagnoses match the current filters.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(function(r) {
+    var hasPhoto = photoBlobs && photoBlobs.has(r._photoBlob);
+    return [
+      "<tr>",
+        "<td class='thumb-cell'>",
+          hasPhoto
+            ? '<img src="' + blobUrl(CFG, CFG.AZURE_INCOMING_CONTAINER, r._photoBlob) + '"'
+                + ' onclick="openLightbox(\'' + blobUrl(CFG, CFG.AZURE_INCOMING_CONTAINER, r._photoBlob) + '\')"'
+                + ' alt="photo" loading="lazy">'
+            : '<div class="no-photo">🌿</div>',
+        "</td>",
+        "<td>" + fmtDate(r.ts) + "</td>",
+        "<td style='font-family:monospace;font-size:11px'>" + r._pi + "</td>",
+        "<td><span class='crop-tag'>" + (r.crop || "—") + "</span></td>",
+        "<td>",
+          '<span class="disease">' + formatDisease(r.label || "—") + "</span>",
+          r.top && r.top[0] ? '<br><span class="conf">' + (r.top[0][2] * 100).toFixed(0) + "% conf</span>" : "",
+        "</td>",
+        "<td><span class='badge " + (r.band || "") + "'>" + (r.band || "—") + "</span></td>",
+        "<td><span class='badge " + (r.mode || "") + "'>" + (r.mode || "—") + "</span></td>",
+      "</tr>",
+    ].join("");
+  }).join("");
+}
+
+function populateFilters() {
+  var piSel   = document.getElementById("f-pi");
+  var cropSel = document.getElementById("f-crop");
+
+  var piIds = Object.keys(PI_MAP).sort();
+  var crops = [...new Set(ALL_ROWS.map(function(r){ return r.crop; }).filter(Boolean))].sort();
+
+  piSel.innerHTML = '<option value="">All Pis</option>'
+    + piIds.map(function(id) { return '<option value="' + id + '">' + id + '</option>'; }).join("");
+
+  cropSel.innerHTML = '<option value="">All Crops</option>'
+    + crops.map(function(c) { return '<option value="' + c + '">' + c + '</option>'; }).join("");
+}
+
+// ── filters ───────────────────────────────────────────────────────────────────
+["f-pi","f-crop","f-band","f-search"].forEach(function(id) {
+  document.getElementById(id).addEventListener("input", applyFilters);
+});
+
+function applyFilters() {
+  var pi     = document.getElementById("f-pi").value;
+  var crop   = document.getElementById("f-crop").value;
+  var band   = document.getElementById("f-band").value;
+  var search = document.getElementById("f-search").value.toLowerCase();
+
+  var filtered = ALL_ROWS.filter(function(r) {
+    if (pi   && r._pi   !== pi)   return false;
+    if (crop && r.crop  !== crop)  return false;
+    if (band && r.band  !== band)  return false;
+    if (search && !(r.label || "").toLowerCase().includes(search)) return false;
+    return true;
+  });
+
+  renderTable(filtered, null);
+}
+
+// ── version bump ──────────────────────────────────────────────────────────────
+var currentVer = 0;
+
+function setVersion(ver) {
+  currentVer = parseInt(ver, 10) || 0;
+  document.getElementById("ver-current").textContent = currentVer;
+  document.getElementById("ver-next").textContent    = currentVer + 1;
+}
+
+async function bumpVersion() {
+  var btn = document.getElementById("btn-bump");
+  if (!confirm("Bump version to " + (currentVer + 1) + "?\n\nAll Pis will pull from outgoing/ on their next ethernet connection.")) return;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span> Bumping…';
+  try {
+    var newVer = String(currentVer + 1);
+    await azPut(CFG.AZURE_OUTGOING_CONTAINER, "version.txt", newVer);
+    setVersion(newVer);
+    document.getElementById("s-ver").textContent = newVer;
+    toast("Version bumped to " + newVer + " ✓");
+  } catch(e) {
+    toast("Failed to bump version: " + e.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Bump version → push update to all Pis";
+  }
+}
+
+// ── CSV export ────────────────────────────────────────────────────────────────
+function downloadCSV() {
+  var pi     = document.getElementById("f-pi").value;
+  var crop   = document.getElementById("f-crop").value;
+  var band   = document.getElementById("f-band").value;
+  var search = document.getElementById("f-search").value.toLowerCase();
+
+  var rows = ALL_ROWS.filter(function(r) {
+    if (pi   && r._pi   !== pi)   return false;
+    if (crop && r.crop  !== crop)  return false;
+    if (band && r.band  !== band)  return false;
+    if (search && !(r.label || "").toLowerCase().includes(search)) return false;
+    return true;
+  });
+
+  var header = ["timestamp","datetime","pi_id","session","crop","label","band","confidence","mode"];
+  var csv = [header.join(",")].concat(rows.map(function(r) {
+    var conf = r.top && r.top[0] ? r.top[0][2].toFixed(3) : "";
+    return [
+      r.ts, fmtDate(r.ts), r._pi, r.session || "",
+      r.crop || "", r.label || "", r.band || "", conf,
+    ].map(function(v) { return '"' + String(v).replace(/"/g,'""') + '"'; }).join(",");
+  })).join("\n");
+
+  var blob = new Blob([csv], { type: "text/csv" });
+  var a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "agritect-diagnoses-" + new Date().toISOString().slice(0,10) + ".csv";
+  a.click();
+}
+
+// ── lightbox ──────────────────────────────────────────────────────────────────
+function openLightbox(url) {
+  document.getElementById("lightbox-img").src = url;
+  document.getElementById("lightbox").classList.add("on");
+}
+function closeLightbox() {
+  document.getElementById("lightbox").classList.remove("on");
+  document.getElementById("lightbox-img").src = "";
+}
+
+// ── utils ─────────────────────────────────────────────────────────────────────
+function formatDisease(label) {
+  if (!label) return "—";
+  if (label.startsWith("_")) return label.replace("_","").replace(/_/g," ");
+  return label
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/(corn|tomato|potato|pepperbell)/i, function(m) {
+      return m.charAt(0).toUpperCase() + m.slice(1) + " · ";
+    })
+    .replace(/_/g, " ");
+}
+
+function fmtDate(ts) {
+  var d = new Date(ts * 1000);
+  return d.toLocaleDateString() + " " + d.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
+}
+
+function toast(msg, isErr) {
+  var el = document.getElementById("toast");
+  el.textContent = msg;
+  el.style.background = isErr ? "var(--red)" : "var(--ink)";
+  el.style.display = "block";
+  clearTimeout(toast._t);
+  toast._t = setTimeout(function(){ el.style.display = "none"; }, 3500);
+}
+
+// ── init ──────────────────────────────────────────────────────────────────────
+function showDashboard() {
+  document.getElementById("setup").style.display = "none";
+  document.getElementById("dashboard").style.display = "block";
+  var url = CFG.AZURE_ACCOUNT_URL || "";
+  var acct = url.replace("https://","").split(".")[0];
+  document.getElementById("acct-label").textContent = acct;
+  loadAll();
+}
+
+(function init() {
+  var saved = localStorage.getItem("ag_support_cfg");
+  if (saved) {
+    try {
+      CFG = JSON.parse(saved);
+      if (validateCfg(CFG)) { showDashboard(); return; }
+    } catch(e) {}
+  }
+  document.getElementById("setup").style.display = "flex";
+})();
+</script>
+</body>
+</html>
